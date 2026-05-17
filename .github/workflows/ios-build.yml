@@ -1,9 +1,9 @@
-name: Build iOS IPA
+﻿name: Build iOS IPA
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # allows manual trigger from GitHub website
+  workflow_dispatch:
 
 jobs:
   build-ios:
@@ -17,14 +17,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm install
 
       - name: Install Expo CLI
-        run: npm install -g expo-cli @expo/cli
+        run: npm install -g @expo/cli
 
       - name: Generate native iOS code
         run: npx expo prebuild --platform ios --clean
@@ -36,60 +36,44 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: Build iOS archive (no code signing)
+      - name: Find scheme name
+        id: scheme
+        run: |
+          cd ios
+          SCHEME=$(xcodebuild -list -workspace *.xcworkspace 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | grep -v "^$" | head -1 | tr -d " ")
+          echo "Found scheme: $SCHEME"
+          echo "name=$SCHEME" >> $GITHUB_OUTPUT
+
+      - name: Build iOS archive
         run: |
           cd ios
           xcodebuild archive \
-            -workspace StreamCam.xcworkspace \
-            -scheme StreamCam \
+            -workspace *.xcworkspace \
+            -scheme "${{ steps.scheme.outputs.name }}" \
             -configuration Release \
-            -archivePath $RUNNER_TEMP/StreamCam.xcarchive \
+            -archivePath "$RUNNER_TEMP/StreamCam.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty
+            PROVISIONING_PROFILE="" \
+            2>&1 | tail -30
 
-      - name: Export IPA (unsigned)
+      - name: Package IPA from archive
         run: |
-          cat > /tmp/ExportOptions.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>thinning</key>
-            <string>&lt;none&gt;</string>
-          </dict>
-          </plist>
-          EOF
+          ARCHIVE="$RUNNER_TEMP/StreamCam.xcarchive"
+          OUTPUT="$RUNNER_TEMP/output"
+          PAYLOAD="$RUNNER_TEMP/Payload"
+          mkdir -p "$OUTPUT" "$PAYLOAD"
+          APP_PATH=$(find "$ARCHIVE/Products/Applications" -name "*.app" | head -1)
+          echo "Found app: $APP_PATH"
+          cp -r "$APP_PATH" "$PAYLOAD/"
+          cd "$RUNNER_TEMP"
+          zip -r "$OUTPUT/StreamCam.ipa" Payload
+          ls -lh "$OUTPUT/StreamCam.ipa"
 
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/StreamCam.xcarchive \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/output \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcpretty || true
-
-          # Fallback: extract IPA directly from archive if export fails
-          mkdir -p $RUNNER_TEMP/output
-          cd $RUNNER_TEMP/StreamCam.xcarchive/Products/Applications
-          mkdir -p Payload
-          cp -r *.app Payload/
-          zip -r $RUNNER_TEMP/output/StreamCam.ipa Payload
-          echo "IPA created successfully"
-
-      - name: Upload IPA as artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: StreamCam-iOS
           path: ${{ runner.temp }}/output/StreamCam.ipa
-          retention-days: 14
+          retention-days: 30
