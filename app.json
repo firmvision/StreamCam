@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "StreamCam",
+    "slug": "StreamCam",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#141414"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.streamcam.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "StreamCam needs camera access to stream video to your PC.",
+        "NSMicrophoneUsageDescription": "StreamCam needs microphone access to stream audio.",
+        "NSLocalNetworkUsageDescription": "StreamCam connects to your local PC to stream video.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#141414"
+      },
+      "package": "com.streamcam.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "StreamCam needs access to your camera to stream video.",
+          "microphonePermission": "StreamCam needs access to your microphone to stream audio."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "79331096-de64-4932-9381-e6ecf5113c4d"
+      }
+    }
+  }
+}
