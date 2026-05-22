@@ -64,8 +64,19 @@ jobs:
           OUTPUT="$RUNNER_TEMP/output"
           PAYLOAD="$RUNNER_TEMP/Payload"
           mkdir -p "$OUTPUT" "$PAYLOAD"
-          APP_PATH=$(find "$ARCHIVE/Products/Applications" -name "*.app" | head -1)
+
+          echo "Archive contents:"
+          find "$ARCHIVE" -maxdepth 4 -type d | head -30
+
+          APP_PATH=$(find "$ARCHIVE" -name "*.app" -type d | head -1)
           echo "Found app: $APP_PATH"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found in archive. Full archive tree:"
+            find "$ARCHIVE" -type f | head -40
+            exit 1
+          fi
+
           cp -r "$APP_PATH" "$PAYLOAD/"
           cd "$RUNNER_TEMP"
           zip -r "$OUTPUT/StreamCam.ipa" Payload
