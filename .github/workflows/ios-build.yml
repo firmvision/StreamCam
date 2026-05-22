@@ -44,7 +44,8 @@ jobs:
           xcodebuild -list -workspace *.xcworkspace 2>/dev/null
           echo "=============================="
           # The workspace name always matches the main app scheme
-          WORKSPACE=$(ls *.xcworkspace | head -1)
+          # Use -d to list the directory itself, not its contents
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
           SCHEME="${WORKSPACE%.xcworkspace}"
           echo "Using scheme: $SCHEME"
           echo "name=$SCHEME" >> $GITHUB_OUTPUT
