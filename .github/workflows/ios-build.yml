@@ -43,16 +43,10 @@ jobs:
           echo "=== All available schemes ==="
           xcodebuild -list -workspace *.xcworkspace 2>/dev/null
           echo "=============================="
-          # Pick first scheme that is NOT a Pods scheme and NOT a test scheme
-          SCHEME=$(xcodebuild -list -workspace *.xcworkspace 2>/dev/null \
-            | grep -A 100 "Schemes:" \
-            | grep -v "Schemes:" \
-            | tr -d ' ' \
-            | grep -v "^$" \
-            | grep -v "^Pods" \
-            | grep -v "Tests" \
-            | head -1)
-          echo "Selected scheme: $SCHEME"
+          # The workspace name always matches the main app scheme
+          WORKSPACE=$(ls *.xcworkspace | head -1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          echo "Using scheme: $SCHEME"
           echo "name=$SCHEME" >> $GITHUB_OUTPUT
 
       - name: Build iOS app (unsigned)
