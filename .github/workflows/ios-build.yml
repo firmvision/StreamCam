@@ -53,6 +53,7 @@ jobs:
       - name: Build iOS app (unsigned)
         run: |
           cd ios
+          export NODE_BINARY=$(which node)
           xcodebuild build \
             -workspace *.xcworkspace \
             -scheme "${{ steps.scheme.outputs.name }}" \
@@ -63,7 +64,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE="" \
-            2>&1 | tail -50
+            SKIP_BUNDLING=NO \
+            2>&1 | tail -80
 
       - name: Package IPA
         run: |
