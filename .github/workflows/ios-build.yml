@@ -1,4 +1,4 @@
-﻿name: Build iOS IPA
+name: Build iOS IPA
 
 on:
   push:
@@ -40,42 +40,59 @@ jobs:
         id: scheme
         run: |
           cd ios
-          SCHEME=$(xcodebuild -list -workspace *.xcworkspace 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | grep -v "^$" | head -1 | tr -d " ")
-          echo "Found scheme: $SCHEME"
+          echo "=== All available schemes ==="
+          xcodebuild -list -workspace *.xcworkspace 2>/dev/null
+          echo "=============================="
+          # Pick first scheme that is NOT a Pods scheme and NOT a test scheme
+          SCHEME=$(xcodebuild -list -workspace *.xcworkspace 2>/dev/null \
+            | grep -A 100 "Schemes:" \
+            | grep -v "Schemes:" \
+            | tr -d ' ' \
+            | grep -v "^$" \
+            | grep -v "^Pods" \
+            | grep -v "Tests" \
+            | head -1)
+          echo "Selected scheme: $SCHEME"
           echo "name=$SCHEME" >> $GITHUB_OUTPUT
 
-      - name: Build iOS archive
+      - name: Build iOS app (unsigned)
         run: |
           cd ios
-          xcodebuild archive \
+          xcodebuild build \
             -workspace *.xcworkspace \
             -scheme "${{ steps.scheme.outputs.name }}" \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/StreamCam.xcarchive" \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE="" \
-            SKIP_INSTALL=NO \
             2>&1 | tail -50
 
-      - name: Package IPA from archive
+      - name: Package IPA
         run: |
-          ARCHIVE="$RUNNER_TEMP/StreamCam.xcarchive"
+          DERIVED_DATA="$RUNNER_TEMP/DerivedData"
           OUTPUT="$RUNNER_TEMP/output"
           PAYLOAD="$RUNNER_TEMP/Payload"
           mkdir -p "$OUTPUT" "$PAYLOAD"
 
-          echo "Archive contents:"
-          find "$ARCHIVE" -maxdepth 4 -type d | head -30
+          echo "=== Searching for .app in DerivedData ==="
+          find "$DERIVED_DATA" -name "*.app" -type d | head -10
 
-          APP_PATH=$(find "$ARCHIVE" -name "*.app" -type d | head -1)
+          # Try the standard Release-iphoneos path first
+          APP_PATH=$(find "$DERIVED_DATA/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
+
+          # Fall back to searching all of DerivedData, excluding test bundles
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find "$DERIVED_DATA" -name "*.app" -type d | grep -v "\.xctest" | grep -v "simulator" | head -1)
+          fi
+
           echo "Found app: $APP_PATH"
 
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found in archive. Full archive tree:"
-            find "$ARCHIVE" -type f | head -40
+            echo "ERROR: No .app found. DerivedData Build/Products:"
+            find "$DERIVED_DATA/Build/Products" -maxdepth 3 | head -40
             exit 1
           fi
 
