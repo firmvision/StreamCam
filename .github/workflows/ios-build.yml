@@ -50,10 +50,20 @@ jobs:
           echo "Using scheme: $SCHEME"
           echo "name=$SCHEME" >> $GITHUB_OUTPUT
 
+      - name: Bundle JavaScript manually
+        run: |
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output "$RUNNER_TEMP/main.jsbundle" \
+            --assets-dest "$RUNNER_TEMP/assets" \
+            --reset-cache
+          echo "Bundle size: $(du -h $RUNNER_TEMP/main.jsbundle | cut -f1)"
+
       - name: Build iOS app (unsigned)
         run: |
           cd ios
-          export NODE_BINARY=$(which node)
           xcodebuild build \
             -workspace *.xcworkspace \
             -scheme "${{ steps.scheme.outputs.name }}" \
@@ -64,8 +74,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE="" \
-            SKIP_BUNDLING=NO \
+            SKIP_BUNDLING=YES \
             2>&1 | tail -80
+
+      - name: Inject JS bundle into .app
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" -type d | head -1)
+          echo "Injecting bundle into: $APP_PATH"
+          cp "$RUNNER_TEMP/main.jsbundle" "$APP_PATH/main.jsbundle"
+          if [ -d "$RUNNER_TEMP/assets" ]; then
+            cp -r "$RUNNER_TEMP/assets" "$APP_PATH/assets"
+          fi
+          echo "✅ Bundle injected ($(du -h $APP_PATH/main.jsbundle | cut -f1))"
 
       - name: Package IPA
         run: |
