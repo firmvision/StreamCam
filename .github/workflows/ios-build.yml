@@ -52,12 +52,12 @@ jobs:
 
       - name: Bundle JavaScript manually
         run: |
-          npx react-native bundle \
+          npx expo export:embed \
             --platform ios \
-            --dev false \
             --entry-file index.js \
             --bundle-output "$RUNNER_TEMP/main.jsbundle" \
             --assets-dest "$RUNNER_TEMP/assets" \
+            --dev false \
             --reset-cache
           echo "Bundle size: $(du -h $RUNNER_TEMP/main.jsbundle | cut -f1)"
 
