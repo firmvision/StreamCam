@@ -98,6 +98,28 @@ jobs:
           zip -r "$OUTPUT/StreamCam.ipa" Payload
           ls -lh "$OUTPUT/StreamCam.ipa"
 
+      - name: Verify IPA contents
+        run: |
+          IPA="$RUNNER_TEMP/output/StreamCam.ipa"
+          INSPECT="$RUNNER_TEMP/inspect"
+          mkdir -p "$INSPECT"
+          unzip -q "$IPA" -d "$INSPECT"
+
+          APP_PATH=$(find "$INSPECT/Payload" -name "*.app" -type d | head -1)
+          echo "App bundle: $APP_PATH"
+
+          echo "=== Key files in .app ==="
+          ls -lh "$APP_PATH" | grep -E "main.jsbundle|assets|Info.plist|StreamCam" || true
+
+          if [ -f "$APP_PATH/main.jsbundle" ]; then
+            BUNDLE_SIZE=$(du -h "$APP_PATH/main.jsbundle" | cut -f1)
+            echo "✅ main.jsbundle FOUND — size: $BUNDLE_SIZE"
+          else
+            echo "❌ main.jsbundle MISSING — app will crash on launch"
+            echo "All files in .app:"
+            ls "$APP_PATH"
+          fi
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
