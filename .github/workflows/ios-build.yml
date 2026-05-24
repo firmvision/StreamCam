@@ -128,16 +128,20 @@ jobs:
           APP_PATH=$(find "$INSPECT/Payload" -name "*.app" -type d | head -1)
           echo "App bundle: $APP_PATH"
 
-          echo "=== Key files in .app ==="
-          ls -lh "$APP_PATH" | grep -E "main.jsbundle|assets|Info.plist|StreamCam" || true
+          echo "=== All files in .app root ==="
+          ls -lh "$APP_PATH"
 
           if [ -f "$APP_PATH/main.jsbundle" ]; then
-            BUNDLE_SIZE=$(du -h "$APP_PATH/main.jsbundle" | cut -f1)
-            echo "✅ main.jsbundle FOUND — size: $BUNDLE_SIZE"
+            echo "✅ main.jsbundle FOUND — $(du -h $APP_PATH/main.jsbundle | cut -f1)"
           else
-            echo "❌ main.jsbundle MISSING — app will crash on launch"
-            echo "All files in .app:"
-            ls "$APP_PATH"
+            echo "❌ main.jsbundle MISSING"
+          fi
+
+          if [ -d "$APP_PATH/Frameworks" ]; then
+            echo "✅ Frameworks dir FOUND:"
+            ls "$APP_PATH/Frameworks" | head -20
+          else
+            echo "❌ Frameworks dir MISSING — this will cause a crash"
           fi
 
       - name: Upload IPA artifact
