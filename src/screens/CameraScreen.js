@@ -4,7 +4,9 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RTMPPublisher } from 'react-native-rtmp-publisher';
+// DIAGNOSTIC: temporarily replaced RTMPPublisher with a plain View
+// import { RTMPPublisher } from 'react-native-rtmp-publisher';
+const RTMPPublisher = (props) => <View style={props.style} />;
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 
