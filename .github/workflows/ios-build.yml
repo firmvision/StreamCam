@@ -141,8 +141,12 @@ jobs:
             echo "✅ Frameworks dir FOUND:"
             ls "$APP_PATH/Frameworks" | head -20
           else
-            echo "❌ Frameworks dir MISSING — this will cause a crash"
+            echo "⚠️ Frameworks dir MISSING — checking if binary is fully static"
           fi
+
+          echo ""
+          echo "=== Dynamic libraries needed by binary ==="
+          otool -L "$APP_PATH/StreamCam" | head -30
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
