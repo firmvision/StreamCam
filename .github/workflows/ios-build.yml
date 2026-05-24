@@ -87,6 +87,29 @@ jobs:
           fi
           echo "✅ Bundle injected ($(du -h $APP_PATH/main.jsbundle | cut -f1))"
 
+      - name: Ad-hoc sign all binaries
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" -type d | head -1)
+          echo "Signing frameworks in: $APP_PATH"
+
+          # Sign all frameworks first (must be signed before the main binary)
+          find "$APP_PATH/Frameworks" -name "*.framework" -type d 2>/dev/null | while read fw; do
+            echo "Signing framework: $fw"
+            codesign --force --sign - --timestamp=none "$fw"
+          done
+
+          # Sign any loose dylibs
+          find "$APP_PATH" -name "*.dylib" 2>/dev/null | while read lib; do
+            echo "Signing dylib: $lib"
+            codesign --force --sign - --timestamp=none "$lib"
+          done
+
+          # Sign the main binary last
+          echo "Signing main binary"
+          codesign --force --sign - --timestamp=none "$APP_PATH"
+
+          echo "✅ Ad-hoc signing complete"
+
       - name: Package IPA
         run: |
           DERIVED_DATA="$RUNNER_TEMP/DerivedData"
