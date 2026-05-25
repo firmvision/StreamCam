@@ -1,29 +1,25 @@
-// NodeMediaClient video presets:
-// 1=360p, 2=480p, 3=540p, 4=720p, 5=1080p
+// Resolutions supported by @api.video/react-native-livestream:
+// '240p' | '360p' | '480p' | '720p' | '1080p'
 export const QUALITIES = {
   '1080p30': {
     label: '1080p 30fps',
-    width: 1920, height: 1080, fps: 30,
-    bitrate: 6000 * 1000,
-    nmc_preset: 5,
+    fps: 30, resolution: '1080p',
+    bitrate: 6 * 1024 * 1024,
   },
   '720p30': {
     label: '720p 30fps',
-    width: 1280, height: 720, fps: 30,
-    bitrate: 3000 * 1000,
-    nmc_preset: 4,
-  },
-  '540p30': {
-    label: '540p 30fps',
-    width: 960, height: 540, fps: 30,
-    bitrate: 1500 * 1000,
-    nmc_preset: 3,
+    fps: 30, resolution: '720p',
+    bitrate: 3 * 1024 * 1024,
   },
   '480p30': {
     label: '480p 30fps',
-    width: 854, height: 480, fps: 30,
-    bitrate: 800 * 1000,
-    nmc_preset: 2,
+    fps: 30, resolution: '480p',
+    bitrate: 1 * 1024 * 1024,
+  },
+  '360p30': {
+    label: '360p 30fps',
+    fps: 30, resolution: '360p',
+    bitrate: 500 * 1024,
   },
 };
 

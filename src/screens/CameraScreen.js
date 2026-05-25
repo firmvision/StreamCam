@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert, StyleSheet, Text,
-  TouchableOpacity, View,
-} from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import NodeCameraView from 'react-native-nodemediaclient';
+import LiveStreamView from '@api.video/react-native-livestream';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 
@@ -19,13 +16,13 @@ export default function CameraScreen({ navigation }) {
 
   const insets = useSafeAreaInsets();
   const { settings, updateSetting } = useStreamSettings();
-  const cameraRef = useRef(null);
+  const liveRef = useRef(null);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [duration, setDuration] = useState(0);
 
-  const quality = QUALITIES[settings.quality] ?? QUALITIES['1080p30'];
+  const quality = QUALITIES[settings.quality] ?? QUALITIES['720p30'];
 
   // Duration timer
   useEffect(() => {
@@ -34,24 +31,26 @@ export default function CameraScreen({ navigation }) {
     return () => clearInterval(t);
   }, [isStreaming]);
 
-  // ── Stream control ────────────────────────────────────────────────────
+  // ── Stream control ─────────────────────────────────────────────────────
 
-  const startStream = useCallback(() => {
+  const startStream = useCallback(async () => {
     if (!settings.rtmpUrl || settings.rtmpUrl.includes('192.168.1.x')) {
-      Alert.alert(
-        'Server not configured',
-        "Tap ⚙️ to set your PC's IP address first.",
-      );
+      Alert.alert('Server not configured', "Tap ⚙️ to set your PC's IP address first.");
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsConnecting(true);
-    cameraRef.current?.start();
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsConnecting(true);
+      await liveRef.current?.startStreaming(settings.rtmpUrl);
+    } catch (e) {
+      Alert.alert('Stream error', e.message ?? 'Could not connect');
+      setIsConnecting(false);
+    }
   }, [settings.rtmpUrl]);
 
-  const stopStream = useCallback(() => {
+  const stopStream = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    cameraRef.current?.stop();
+    await liveRef.current?.stopStreaming();
     setIsStreaming(false);
     setIsConnecting(false);
     setDuration(0);
@@ -59,64 +58,52 @@ export default function CameraScreen({ navigation }) {
 
   const flipCamera = useCallback(() => {
     Haptics.selectionAsync();
-    cameraRef.current?.switchCamera();
-  }, []);
+    updateSetting('cameraFacing', settings.cameraFacing === 'back' ? 'front' : 'back');
+  }, [settings.cameraFacing]);
 
   const toggleMute = useCallback(() => {
     Haptics.selectionAsync();
     updateSetting('muted', !settings.muted);
   }, [settings.muted]);
 
-  // ── NodeMediaClient event handlers ────────────────────────────────────
-
-  const onStatus = useCallback((code, msg) => {
-    // NodeMediaClient status codes:
-    // 2000 = connecting, 2001 = connected, 2002 = disconnected, 2004 = failed
-    if (code === 2001) {
-      setIsConnecting(false);
-      setIsStreaming(true);
-    } else if (code === 2002 || code === 2004) {
-      setIsStreaming(false);
-      setIsConnecting(false);
-      setDuration(0);
-      if (code === 2004) {
-        Alert.alert('Connection failed', msg ?? 'Check your server URL and network.');
-      }
-    }
-  }, []);
-
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.root}>
 
-      {/* ── Camera + RTMP ── */}
       <View style={styles.cameraWrap}>
-        <NodeCameraView
-          ref={cameraRef}
+        <LiveStreamView
+          ref={liveRef}
           style={StyleSheet.absoluteFill}
-          camera={{
-            cameraId: 0,          // 0 = back, 1 = front
-            cameraFrontMirror: true,
+          camera={settings.cameraFacing ?? 'back'}
+          isMuted={settings.muted ?? false}
+          video={{
+            fps: quality.fps,
+            resolution: quality.resolution,
+            bitrate: quality.bitrate,
+            gopDuration: 1,
           }}
           audio={{
             bitrate: 128000,
-            profile: 1,
-            samplerate: 44100,
+            sampleRate: 44100,
+            isStereo: true,
           }}
-          video={{
-            preset: quality.nmc_preset,
-            bitrate: quality.bitrate,
-            profile: 1,
-            fps: quality.fps,
-            videoFrontMirror: false,
+          onConnectionSuccess={() => {
+            setIsConnecting(false);
+            setIsStreaming(true);
           }}
-          autopreview={true}
-          outputUrl={settings.rtmpUrl}
-          onStatus={onStatus}
+          onConnectionFailed={(reason) => {
+            setIsConnecting(false);
+            setIsStreaming(false);
+            Alert.alert('Connection failed', reason ?? 'Check your server URL and network.');
+          }}
+          onDisconnect={() => {
+            setIsStreaming(false);
+            setIsConnecting(false);
+            setDuration(0);
+          }}
         />
 
-        {/* Filter color overlay — tints the preview */}
         <FilterOverlay filterKey={settings.filter} />
 
         {/* Top bar */}
@@ -144,7 +131,7 @@ export default function CameraScreen({ navigation }) {
         </View>
       </View>
 
-      {/* ── Bottom controls ── */}
+      {/* Bottom controls */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 4 }]}>
         <TouchableOpacity style={styles.qualityBadge} onPress={() => navigation.navigate('Settings')}>
           <Text style={styles.qualityText}>{quality.label}</Text>
@@ -168,23 +155,17 @@ export default function CameraScreen({ navigation }) {
   );
 }
 
-// Semi-transparent color overlay to simulate filter effect on preview
 function FilterOverlay({ filterKey }) {
   const overlayColors = {
     warm:      'rgba(255,140,0,0.12)',
     cool:      'rgba(0,100,255,0.10)',
     cinematic: 'rgba(80,40,0,0.15)',
     vivid:     'rgba(255,0,255,0.04)',
-    bw:        null,
     fade:      'rgba(220,220,220,0.15)',
-    natural:   null,
   };
-
   const color = overlayColors[filterKey];
   const isGrayscale = filterKey === 'bw';
-
   if (!color && !isGrayscale) return null;
-
   return (
     <View
       pointerEvents="none"
@@ -199,9 +180,7 @@ function FilterOverlay({ filterKey }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-
-  cameraWrap: { flex: 1, position: 'relative', overflow: 'hidden' },
-
+  cameraWrap: { flex: 1, overflow: 'hidden' },
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center',
@@ -218,9 +197,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   iconText: { fontSize: 20 },
-
   bottomBar: { backgroundColor: '#141414', paddingTop: 6 },
-
   qualityBadge: {
     alignSelf: 'center', marginBottom: 4,
     backgroundColor: 'rgba(255,255,255,0.08)',
