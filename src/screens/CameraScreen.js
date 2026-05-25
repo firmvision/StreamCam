@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Platform, StyleSheet, Text,
+  Alert, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-// DIAGNOSTIC: temporarily replaced RTMPPublisher with a plain View
-// import { RTMPPublisher } from 'react-native-rtmp-publisher';
-const RTMPPublisher = (props) => <View style={props.style} />;
+import NodeCameraView from 'react-native-nodemediaclient';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 
@@ -21,12 +19,11 @@ export default function CameraScreen({ navigation }) {
 
   const insets = useSafeAreaInsets();
   const { settings, updateSetting } = useStreamSettings();
-  const publisherRef = useRef(null);
+  const cameraRef = useRef(null);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState('idle');
 
   const quality = QUALITIES[settings.quality] ?? QUALITIES['1080p30'];
 
@@ -39,7 +36,7 @@ export default function CameraScreen({ navigation }) {
 
   // ── Stream control ────────────────────────────────────────────────────
 
-  const startStream = useCallback(async () => {
+  const startStream = useCallback(() => {
     if (!settings.rtmpUrl || settings.rtmpUrl.includes('192.168.1.x')) {
       Alert.alert(
         'Server not configured',
@@ -47,21 +44,14 @@ export default function CameraScreen({ navigation }) {
       );
       return;
     }
-    setIsConnecting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      await publisherRef.current?.startStream(settings.rtmpUrl);
-    } catch (e) {
-      Alert.alert('Stream error', e.message ?? 'Could not connect');
-      setIsConnecting(false);
-    }
+    setIsConnecting(true);
+    cameraRef.current?.start();
   }, [settings.rtmpUrl]);
 
-  const stopStream = useCallback(async () => {
+  const stopStream = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await publisherRef.current?.stopStream();
-    } catch {}
+    cameraRef.current?.stop();
     setIsStreaming(false);
     setIsConnecting(false);
     setDuration(0);
@@ -69,29 +59,31 @@ export default function CameraScreen({ navigation }) {
 
   const flipCamera = useCallback(() => {
     Haptics.selectionAsync();
-    publisherRef.current?.switchCamera();
+    cameraRef.current?.switchCamera();
   }, []);
 
   const toggleMute = useCallback(() => {
     Haptics.selectionAsync();
-    publisherRef.current?.toggleMute();
     updateSetting('muted', !settings.muted);
   }, [settings.muted]);
 
-  const toggleTorch = useCallback(() => {
-    Haptics.selectionAsync();
-    publisherRef.current?.toggleFlash();
-    updateSetting('torch', !settings.torch);
-  }, [settings.torch]);
+  // ── NodeMediaClient event handlers ────────────────────────────────────
 
-  // ── Publisher event handlers ──────────────────────────────────────────
-
-  const onConnectionStarted  = () => { setIsConnecting(false); setIsStreaming(true); setConnectionStatus('connected'); };
-  const onConnectionFailed   = (e) => { setIsConnecting(false); setIsStreaming(false); setConnectionStatus('error'); Alert.alert('Connection failed', e ?? 'Check your server URL and network.'); };
-  const onConnectionClosed   = ()  => { setIsStreaming(false); setIsConnecting(false); setDuration(0); setConnectionStatus('idle'); };
-  const onDisconnect         = ()  => { setIsStreaming(false); setIsConnecting(false); setConnectionStatus('idle'); };
-  const onNewBitrateReceived = ()  => {};
-  const onStreamStateChanged = (state) => { setConnectionStatus(state?.toLowerCase?.() ?? 'idle'); };
+  const onStatus = useCallback((code, msg) => {
+    // NodeMediaClient status codes:
+    // 2000 = connecting, 2001 = connected, 2002 = disconnected, 2004 = failed
+    if (code === 2001) {
+      setIsConnecting(false);
+      setIsStreaming(true);
+    } else if (code === 2002 || code === 2004) {
+      setIsStreaming(false);
+      setIsConnecting(false);
+      setDuration(0);
+      if (code === 2004) {
+        Alert.alert('Connection failed', msg ?? 'Check your server URL and network.');
+      }
+    }
+  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -100,17 +92,28 @@ export default function CameraScreen({ navigation }) {
 
       {/* ── Camera + RTMP ── */}
       <View style={styles.cameraWrap}>
-        <RTMPPublisher
-          ref={publisherRef}
+        <NodeCameraView
+          ref={cameraRef}
           style={StyleSheet.absoluteFill}
-          onConnectionStarted={onConnectionStarted}
-          onConnectionFailed={onConnectionFailed}
-          onConnectionClosed={onConnectionClosed}
-          onDisconnect={onDisconnect}
-          onNewBitrateReceived={onNewBitrateReceived}
-          onStreamStateChanged={onStreamStateChanged}
-          videoQuality={quality.preset ?? 'hd'}
-          audioQuality="high"
+          camera={{
+            cameraId: 0,          // 0 = back, 1 = front
+            cameraFrontMirror: true,
+          }}
+          audio={{
+            bitrate: 128000,
+            profile: 1,
+            samplerate: 44100,
+          }}
+          video={{
+            preset: quality.nmc_preset,
+            bitrate: quality.bitrate,
+            profile: 1,
+            fps: quality.fps,
+            videoFrontMirror: false,
+          }}
+          autopreview={true}
+          outputUrl={settings.rtmpUrl}
+          onStatus={onStatus}
         />
 
         {/* Filter color overlay — tints the preview */}
@@ -134,9 +137,6 @@ export default function CameraScreen({ navigation }) {
         <View style={styles.sideControls}>
           <TouchableOpacity style={styles.iconBtn} onPress={flipCamera}>
             <Text style={styles.iconText}>🔄</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={toggleTorch}>
-            <Text style={styles.iconText}>{settings.torch ? '🔦' : '💡'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={toggleMute}>
             <Text style={styles.iconText}>{settings.muted ? '🔇' : '🎙️'}</Text>
@@ -171,13 +171,13 @@ export default function CameraScreen({ navigation }) {
 // Semi-transparent color overlay to simulate filter effect on preview
 function FilterOverlay({ filterKey }) {
   const overlayColors = {
-    warm:       'rgba(255,140,0,0.12)',
-    cool:       'rgba(0,100,255,0.10)',
-    cinematic:  'rgba(80,40,0,0.15)',
-    vivid:      'rgba(255,0,255,0.04)',
-    bw:         null, // handled via grayscale style
-    fade:       'rgba(220,220,220,0.15)',
-    natural:    null,
+    warm:      'rgba(255,140,0,0.12)',
+    cool:      'rgba(0,100,255,0.10)',
+    cinematic: 'rgba(80,40,0,0.15)',
+    vivid:     'rgba(255,0,255,0.04)',
+    bw:        null,
+    fade:      'rgba(220,220,220,0.15)',
+    natural:   null,
   };
 
   const color = overlayColors[filterKey];
